@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AudioToText - Convertir Audio en Texte</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-microphone"></i> AudioToText</h1>
+            <p>Convertir des voix, des paroles en Texte, même s'il y a plusieurs interlocuteurs</p>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <div class="upload-card">
+                    <h2>Télécharger un fichier audio</h2>
+
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </div>
+                        <div class="upload-text">
+                            <h3>Glissez-déposez votre fichier audio ici</h3>
+                            <p>ou</p>
+                            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                                Parcourir les fichiers
+                            </button>
+                        </div>
+                        <input type="file" id="fileInput" accept=".mp3,.wav,.m4a,.flac,.ogg,.webm" hidden>
+                        <div class="file-info" id="fileInfo"></div>
+                    </div>
+
+                    <div class="options-section">
+                        <h3>Options de transcription</h3>
+
+                        <div class="option-group">
+                            <label for="modelSelect">Modèle de reconnaissance:</label>
+                            <select id="modelSelect" class="form-control">
+                                <option value="tiny">Tiny (Très rapide)</option>
+                                <option value="base" selected>Base (Équilibré)</option>
+                                <option value="small">Small (Précis)</option>
+                                <option value="medium">Medium (Très précis)</option>
+                            </select>
+                        </div>
+
+                        <div class="option-group">
+                            <label for="languageSelect">Langue:</label>
+                            <select id="languageSelect" class="form-control">
+                                <option value="">Détecter automatiquement</option>
+                                <option value="fr">Français</option>
+                                <option value="en">English</option>
+                                <option value="es">Español</option>
+                                <option value="de">Deutsch</option>
+                                <option value="it">Italiano</option>
+                                <option value="pt">Português</option>
+                                <option value="nl">Nederlands</option>
+                                <option value="ru">Русский</option>
+                                <option value="zh">中文</option>
+                                <option value="ja">日本語</option>
+                            </select>
+                        </div>
+
+                        <div class="option-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="detectSpeakers" checked>
+                                <span class="checkmark"></span>
+                                Détecter les interlocuteurs multiples
+                            </label>
+                        </div>
+
+                        <div class="option-group">
+                            <label for="outputFormat">Format de sortie:</label>
+                            <select id="outputFormat" class="form-control">
+                                <option value="json">JSON</option>
+                                <option value="txt" selected>Texte simple</option>
+                                <option value="srt">SRT (Sous-titres)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-success btn-large" id="startTranscription" disabled>
+                        <i class="fas fa-play"></i> Commencer la transcription
+                    </button>
+                </div>
+            </div>
+
+            <div class="progress-section" id="progressSection" style="display: none;">
+                <div class="progress-card">
+                    <h2>Transcription en cours...</h2>
+
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progressBar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <div class="progress-text" id="progressText">0%</div>
+                    </div>
+
+                    <div class="status-message" id="statusMessage">
+                        Initialisation de la transcription...
+                    </div>
+
+                    <div class="task-info">
+                        <small>ID de la tâche: <span id="taskId"></span></small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <div class="results-card">
+                    <div class="results-header">
+                        <h2><i class="fas fa-check-circle"></i> Transcription terminée</h2>
+                        <div class="results-actions">
+                            <button class="btn btn-secondary" onclick="copyToClipboard()">
+                                <i class="fas fa-copy"></i> Copier
+                            </button>
+                            <button class="btn btn-primary" onclick="downloadResult()">
+                                <i class="fas fa-download"></i> Télécharger
+                            </button>
+                            <button class="btn btn-outline" onclick="resetForm()">
+                                <i class="fas fa-redo"></i> Nouvelle transcription
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="results-meta" id="resultsMeta"></div>
+
+                    <div class="transcription-content" id="transcriptionContent"></div>
+                </div>
+            </div>
+
+            <div class="error-section" id="errorSection" style="display: none;">
+                <div class="error-card">
+                    <h2><i class="fas fa-exclamation-triangle"></i> Erreur</h2>
+                    <div class="error-message" id="errorMessage"></div>
+                    <button class="btn btn-outline" onclick="resetForm()">
+                        <i class="fas fa-redo"></i> Réessayer
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <div class="supported-formats">
+                <h3>Formats supportés</h3>
+                <div class="format-list">
+                    <span class="format-tag">MP3</span>
+                    <span class="format-tag">WAV</span>
+                    <span class="format-tag">M4A</span>
+                    <span class="format-tag">FLAC</span>
+                    <span class="format-tag">OGG</span>
+                    <span class="format-tag">WebM</span>
+                </div>
+            </div>
+            <p class="footer-text">
+                <i class="fas fa-shield-alt"></i> Traitement 100% local et privé •
+                <i class="fas fa-gift"></i> Gratuit et open source •
+                Maximum 100MB par fichier
+            </p>
+        </footer>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
