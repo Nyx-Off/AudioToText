@@ -245,7 +245,8 @@ async def get_transcription_result(task_id: str, format: str = "json"):
 
     # Return result in requested format
     if format == "json":
-        return JSONResponse(task.result.model_dump())
+        # Use mode='json' to properly serialize datetime objects
+        return JSONResponse(task.result.model_dump(mode='json'))
     else:
         # Serve file for other formats
         output_path = OUTPUT_DIR / f"{task_id}.{format}"

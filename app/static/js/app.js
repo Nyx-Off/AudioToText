@@ -402,7 +402,26 @@ class AudioToTextApp {
     }
 }
 
+// Global functions for HTML onclick events
+function copyToClipboard() {
+    if (window.app) {
+        window.app.copyToClipboard();
+    }
+}
+
+function downloadResult() {
+    if (window.app) {
+        window.app.downloadResult();
+    }
+}
+
+function resetForm() {
+    if (window.app) {
+        window.app.resetForm();
+    }
+}
+
 // Initialize app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    new AudioToTextApp();
+    window.app = new AudioToTextApp();
 });

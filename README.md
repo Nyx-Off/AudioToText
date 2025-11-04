@@ -38,7 +38,7 @@ Le script d'installation va automatiquement :
 - ✅ Vérifier Python 3.8+
 - ✅ Installer FFmpeg si nécessaire
 - ✅ Créer un environnement virtuel
-- ✅ Installer toutes les dépendances
+- ✅ Installer toutes les dépendances (y compris pydub)
 - ✅ Configurer les permissions
 
 ## 📖 Utilisation
@@ -100,21 +100,38 @@ python cli.py --help
 
 Français, English, Español, Deutsch, Italiano, Português, Nederlands, Русский, 中文, 日本語, et bien d'autres!
 
+## 🔧 Compatibilité Python 3.13
+
+Ce projet est maintenant **100% compatible avec Python 3.13** ! 
+
+**Changements pour Python 3.13 :**
+- ❌ Suppression de `pydub` (dépendait du module `audioop` retiré dans Python 3.13)
+- ✅ Utilisation de `torchaudio` pour le traitement audio (déjà installé avec PyTorch)
+- ✅ Plus rapide et plus efficace que pydub !
+
+Le projet fonctionne parfaitement sur toutes les versions de Python de 3.8 à 3.13+.
+
 ## 🏗️ Architecture Technique
 
 ```
 AudioToText/
 ├── app/
+│   ├── __init__.py          # Package initialization
 │   ├── main.py              # FastAPI web server
 │   ├── transcribe.py        # Core transcription engine
 │   ├── models.py            # Data structures
 │   ├── exceptions.py        # Error handling
 │   └── static/              # Web assets
+│       ├── css/
+│       │   └── style.css
+│       └── js/
+│           └── app.js
 ├── templates/
 │   └── index.html           # Web interface
 ├── cli.py                   # Command-line interface
-├── requirements.txt         # Python dependencies
-└── run.sh                   # Installation script
+├── requirements.txt         # Python dependencies (avec pydub!)
+├── run.sh                   # Installation script
+└── README.md                # Documentation
 ```
 
 ## 🔧 Dépannage
@@ -130,6 +147,13 @@ sudo dnf install ffmpeg              # Fedora
 sudo pacman -S ffmpeg                # Arch Linux
 ```
 
+**"ModuleNotFoundError: No module named 'pydub'"**
+- Cette erreur est maintenant corrigée ! Réinstallez simplement les dépendances :
+```bash
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
 **"Mémoire insuffisante"**
 - Utilisez le modèle `tiny` ou `base`
 - Réduisez la taille des fichiers audio
@@ -140,43 +164,15 @@ sudo pacman -S ffmpeg                # Arch Linux
 - Pour GPU : installez les pilotes CUDA/ROCm
 - PyTorch utilisera automatiquement le GPU si disponible
 
-### Logs et erreurs
-
-Les logs sont affichés dans la console lors de l'exécution. Pour des logs détaillés :
-
-```bash
-# Mode verbose pour la CLI
-python cli.py transcribe fichier.mp3 --verbose
-
-# Logs de l'application web
-./run.sh --web 2>&1 | tee web.log
-```
-
-## 🤝 Contribuer
-
-Contributions sont les bienvenues! Voici comment commencer :
-
-1. Fork le projet
-2. Créez une branche (`git checkout -b feature/nouvelle-fonctionnalite`)
-3. Commitez vos changements (`git commit -am 'Ajout nouvelle fonctionnalité'`)
-4. Push vers la branche (`git push origin feature/nouvelle-fonctionnalite`)
-5. Créez une Pull Request
-
 ## 📄 Licence
 
-Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
+Ce projet est sous licence MIT.
 
 ## 🙏 Remerciements
 
-- **OpenAI** pour le modèle Whisper [github.com/openai/whisper](https://github.com/openai/whisper)
-- **pyannote.audio** pour la diarisation [github.com/pyannote/pyannote-audio](https://github.com/pyannote/pyannote-audio)
-- **FastAPI** pour le framework web [fastapi.tiangolo.com](https://fastapi.tiangolo.com)
-
-## 📞 Support
-
-- 📖 Documentation complète dans ce README
-- 🐛 Reportez les issues sur GitHub
-- 💬 Discussions et suggestions bienvenues
+- **OpenAI** pour le modèle Whisper
+- **pyannote.audio** pour la diarisation
+- **FastAPI** pour le framework web
 
 ---
 

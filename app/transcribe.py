@@ -7,8 +7,8 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 import whisper
 import torch
+import torchaudio
 import numpy as np
-from pydub import AudioSegment
 from pathlib import Path
 
 try:
@@ -42,9 +42,12 @@ class AudioTranscriber:
         if self.pyannote_pipeline is None:
             try:
                 print("Loading speaker diarization pipeline...")
+                # Note: Pour utiliser le modèle, vous pouvez avoir besoin d'un token HuggingFace
+                # Obtenez-en un sur https://huggingface.co/pyannote/speaker-diarization
                 self.pyannote_pipeline = Pipeline.from_pretrained(
-                    "pyannote/speaker-diarization-3.1",
-                    use_auth_token=False  # Using the public model
+                    "pyannote/speaker-diarization-3.1"
+                    # Si vous avez un token HuggingFace, décommentez la ligne suivante :
+                    # token="your_huggingface_token_here"
                 )
                 # Move to GPU if available
                 if torch.cuda.is_available():
@@ -105,17 +108,25 @@ class AudioTranscriber:
             return None
 
         try:
-            # Load audio file
-            audio = AudioSegment.from_file(audio_path)
-            # Convert to mono and 16kHz
-            audio = audio.set_channels(1).set_frame_rate(16000)
+            # Load audio file using torchaudio
+            waveform, sample_rate = torchaudio.load(audio_path)
+            
+            # Convert to mono if stereo
+            if waveform.shape[0] > 1:
+                waveform = torch.mean(waveform, dim=0, keepdim=True)
+            
+            # Resample to 16kHz if needed
+            if sample_rate != 16000:
+                resampler = torchaudio.transforms.Resample(sample_rate, 16000)
+                waveform = resampler(waveform)
+                sample_rate = 16000
 
             # Export to temporary wav file for pyannote
             temp_audio = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
             temp_audio_path = temp_audio.name
             temp_audio.close()
 
-            audio.export(temp_audio_path, format="wav")
+            torchaudio.save(temp_audio_path, waveform, sample_rate)
 
             # Perform diarization
             diarization = pipeline(temp_audio_path)
