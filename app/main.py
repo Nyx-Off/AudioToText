@@ -14,6 +14,13 @@ import magic
 
 from app.models import TranscriptionRequest, TaskStatus
 from app.transcribe import transcriber
+from app.exceptions import (
+    FileValidationError,
+    UnsupportedFormatError,
+    FileSizeError,
+    TranscriptionError,
+    TaskNotFoundError
+)
 
 # Initialize FastAPI app
 app = FastAPI(
