@@ -3,6 +3,7 @@ class AudioToTextApp {
         this.currentTaskId = null;
         this.progressInterval = null;
         this.selectedFile = null;
+        this.currentFormat = 'txt';
         this.init();
     }
 
@@ -25,6 +26,12 @@ class AudioToTextApp {
         // Form submission
         const startBtn = document.getElementById('startTranscription');
         startBtn.addEventListener('click', () => this.startTranscription());
+
+        // Output format change
+        const outputFormat = document.getElementById('outputFormat');
+        outputFormat.addEventListener('change', (e) => {
+            this.currentFormat = e.target.value;
+        });
 
         // Prevent default drag behaviors
         document.addEventListener('dragover', (e) => e.preventDefault());
@@ -59,12 +66,6 @@ class AudioToTextApp {
 
     processFile(file) {
         // Validate file type
-        const supportedTypes = [
-            'audio/mpeg', 'audio/wav', 'audio/x-wav',
-            'audio/mp4', 'audio/m4a', 'audio/flac',
-            'audio/ogg', 'audio/webm'
-        ];
-
         const supportedExtensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.webm'];
         const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
 
@@ -118,7 +119,10 @@ class AudioToTextApp {
             formData.append('detect_speakers', document.getElementById('detectSpeakers').checked);
             formData.append('model_size', document.getElementById('modelSelect').value);
             formData.append('language', document.getElementById('languageSelect').value);
-            formData.append('output_format', document.getElementById('outputFormat').value);
+            
+            // Save current format
+            this.currentFormat = document.getElementById('outputFormat').value;
+            formData.append('output_format', this.currentFormat);
 
             // Show progress section
             this.showProgressSection();
@@ -301,22 +305,50 @@ class AudioToTextApp {
 
     async copyToClipboard() {
         const content = document.getElementById('transcriptionContent');
-        const text = content.textContent || content.innerText;
+        let text = '';
+
+        // Extract text from segments
+        const segments = content.querySelectorAll('.speaker-segment');
+        if (segments.length > 0) {
+            segments.forEach(segment => {
+                const speaker = segment.querySelector('.speaker-label').textContent;
+                const timestamp = segment.querySelector('.timestamp').textContent;
+                const segmentText = segment.querySelector('.segment-text').textContent;
+                text += `${timestamp} ${speaker}: ${segmentText}\n`;
+            });
+        } else {
+            text = content.textContent || content.innerText;
+        }
 
         try {
             await navigator.clipboard.writeText(text);
             this.showToast('Texte copié dans le presse-papiers', 'success');
         } catch (error) {
             console.error('Error copying to clipboard:', error);
-            this.showToast('Erreur lors de la copie', 'error');
+            // Fallback method
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                this.showToast('Texte copié dans le presse-papiers', 'success');
+            } catch (err) {
+                this.showToast('Erreur lors de la copie', 'error');
+            }
+            document.body.removeChild(textArea);
         }
     }
 
     async downloadResult() {
-        if (!this.currentTaskId) return;
+        if (!this.currentTaskId) {
+            this.showToast('Aucune transcription disponible', 'error');
+            return;
+        }
 
         try {
-            const format = document.getElementById('outputFormat').value;
+            // Use the current format
+            const format = this.currentFormat || 'txt';
             const response = await fetch(`/download/${this.currentTaskId}?format=${format}`);
 
             if (!response.ok) {
@@ -350,6 +382,7 @@ class AudioToTextApp {
         // Reset state
         this.currentTaskId = null;
         this.selectedFile = null;
+        this.currentFormat = 'txt';
 
         // Reset form
         document.getElementById('fileInput').value = '';

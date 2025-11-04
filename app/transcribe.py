@@ -1,6 +1,5 @@
 import os
 import uuid
-import asyncio
 import subprocess
 import tempfile
 from datetime import datetime
@@ -37,23 +36,22 @@ class AudioTranscriber:
     def load_pyannote_pipeline(self):
         """Load pyannote.audio pipeline for speaker diarization"""
         if not PYANNOTE_AVAILABLE:
+            print("pyannote.audio not available")
             return None
 
         if self.pyannote_pipeline is None:
             try:
                 print("Loading speaker diarization pipeline...")
-                # Note: Pour utiliser le modèle, vous pouvez avoir besoin d'un token HuggingFace
-                # Obtenez-en un sur https://huggingface.co/pyannote/speaker-diarization
                 self.pyannote_pipeline = Pipeline.from_pretrained(
                     "pyannote/speaker-diarization-3.1"
-                    # Si vous avez un token HuggingFace, décommentez la ligne suivante :
-                    # token="your_huggingface_token_here"
                 )
                 # Move to GPU if available
                 if torch.cuda.is_available():
                     self.pyannote_pipeline.to(torch.device("cuda"))
+                print("Speaker diarization pipeline loaded successfully")
             except Exception as e:
                 print(f"Warning: Could not load speaker diarization pipeline: {e}")
+                print("Speaker diarization will be disabled")
                 return None
         return self.pyannote_pipeline
 
@@ -105,9 +103,12 @@ class AudioTranscriber:
         """Perform speaker diarization using pyannote.audio"""
         pipeline = self.load_pyannote_pipeline()
         if pipeline is None:
+            print("Diarization pipeline not available, skipping...")
             return None
 
         try:
+            print(f"Starting speaker diarization on {audio_path}")
+            
             # Load audio file using torchaudio
             waveform, sample_rate = torchaudio.load(audio_path)
             
@@ -129,30 +130,43 @@ class AudioTranscriber:
             torchaudio.save(temp_audio_path, waveform, sample_rate)
 
             # Perform diarization
+            print("Running diarization...")
             diarization = pipeline(temp_audio_path)
 
             # Convert to list of segments
             segments = []
+            speaker_map = {}
+            speaker_counter = 1
+            
             for turn, _, speaker in diarization.itertracks(yield_label=True):
+                # Map speaker labels to simple numbers
+                if speaker not in speaker_map:
+                    speaker_map[speaker] = speaker_counter
+                    speaker_counter += 1
+                
                 segments.append({
                     "start": turn.start,
                     "end": turn.end,
-                    "speaker": f"Speaker {speaker.split('_')[-1]}"
+                    "speaker": f"Speaker {speaker_map[speaker]}"
                 })
 
             # Clean up temporary file
             os.unlink(temp_audio_path)
 
+            print(f"Diarization complete: found {len(speaker_map)} speakers in {len(segments)} segments")
             return segments
 
         except Exception as e:
             print(f"Speaker diarization failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def assign_speakers_to_segments(self, whisper_segments: List[Dict], speaker_segments: Optional[List]) -> List[TranscriptionSegment]:
         """Assign speaker labels to Whisper segments based on diarization"""
         if not speaker_segments:
             # No speaker diarization available
+            print("No speaker diarization data, assigning all to Speaker 1")
             return [
                 TranscriptionSegment(
                     text=segment["text"].strip(),
@@ -167,22 +181,18 @@ class AudioTranscriber:
 
         for whisper_seg in whisper_segments:
             # Find which speaker segment this whisper segment belongs to
-            assigned_speaker = "Speaker Unknown"
+            assigned_speaker = "Speaker 1"
+            max_overlap = 0
 
             for speaker_seg in speaker_segments:
-                if (whisper_seg["start"] >= speaker_seg["start"] and
-                    whisper_seg["end"] <= speaker_seg["end"]):
+                # Calculate overlap
+                overlap_start = max(whisper_seg["start"], speaker_seg["start"])
+                overlap_end = min(whisper_seg["end"], speaker_seg["end"])
+                overlap_duration = max(0, overlap_end - overlap_start)
+                
+                if overlap_duration > max_overlap:
+                    max_overlap = overlap_duration
                     assigned_speaker = speaker_seg["speaker"]
-                    break
-                # Handle overlapping cases
-                elif (whisper_seg["start"] < speaker_seg["end"] and
-                      whisper_seg["end"] > speaker_seg["start"]):
-                    # If there's overlap, use the speaker with maximum overlap
-                    overlap_start = max(whisper_seg["start"], speaker_seg["start"])
-                    overlap_end = min(whisper_seg["end"], speaker_seg["end"])
-                    if overlap_end > overlap_start:
-                        assigned_speaker = speaker_seg["speaker"]
-                        break
 
             transcription_segments.append(
                 TranscriptionSegment(
@@ -210,25 +220,41 @@ class AudioTranscriber:
             if file_ext not in self.supported_formats:
                 raise Exception(f"Unsupported file format: {file_ext}")
 
+            print(f"\n{'='*60}")
+            print(f"Starting transcription for {os.path.basename(file_path)}")
+            print(f"Model: {model_size}, Detect speakers: {detect_speakers}")
+            print(f"{'='*60}\n")
+
             # Preprocess audio
+            print("Preprocessing audio...")
             processed_audio_path = self.preprocess_audio(file_path)
 
             try:
                 # Transcribe with Whisper
+                print("Starting Whisper transcription...")
                 whisper_result = self.transcribe_with_whisper(processed_audio_path, model_size, language)
+                print(f"Whisper transcription complete: {len(whisper_result['segments'])} segments")
 
                 # Get speaker diarization if requested
                 speaker_segments = None
                 num_speakers = 1
 
                 if detect_speakers and PYANNOTE_AVAILABLE:
+                    print("\nStarting speaker diarization...")
                     speaker_segments = self.diarize_speakers(processed_audio_path)
                     if speaker_segments:
                         # Count unique speakers
                         speakers = set(seg["speaker"] for seg in speaker_segments)
                         num_speakers = len(speakers)
+                        print(f"Detected {num_speakers} speaker(s)")
+                    else:
+                        print("Speaker diarization failed or returned no results")
+                else:
+                    if detect_speakers:
+                        print("Speaker detection requested but pyannote not available")
 
                 # Create transcription segments with speaker labels
+                print("\nAssigning speakers to segments...")
                 transcription_segments = self.assign_speakers_to_segments(
                     whisper_result["segments"], speaker_segments
                 )
@@ -250,11 +276,18 @@ class AudioTranscriber:
                         "model_size": model_size,
                         "original_file": os.path.basename(file_path),
                         "file_format": file_ext,
-                        "speaker_diarization": detect_speakers and PYANNOTE_AVAILABLE
+                        "speaker_diarization": detect_speakers and PYANNOTE_AVAILABLE and speaker_segments is not None
                     },
                     task_id=task_id,
                     created_at=datetime.now()
                 )
+
+                print(f"\n{'='*60}")
+                print("Transcription complete!")
+                print(f"Duration: {audio_duration:.1f}s")
+                print(f"Speakers: {num_speakers}")
+                print(f"Segments: {len(transcription_segments)}")
+                print(f"{'='*60}\n")
 
                 return result
 
@@ -264,6 +297,9 @@ class AudioTranscriber:
                     os.unlink(processed_audio_path)
 
         except Exception as e:
+            print(f"\nERROR during transcription: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise Exception(f"Transcription failed: {str(e)}")
 
     def format_output(self, result: TranscriptionResult, output_format: str = "json") -> str:

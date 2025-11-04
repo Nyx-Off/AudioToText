@@ -117,18 +117,22 @@ async def process_transcription_task(task_id: str, file_path: str, request: Tran
         active_tasks[task_id].message = "Transcription completed"
         active_tasks[task_id].result = result
 
-        # Save result to file
-        output_path = OUTPUT_DIR / f"{task_id}.{request.output_format}"
-        formatted_output = transcriber.format_output(result, request.output_format)
+        # Save results in all formats
+        for format_type in ["json", "txt", "srt"]:
+            output_path = OUTPUT_DIR / f"{task_id}.{format_type}"
+            formatted_output = transcriber.format_output(result, format_type)
 
-        async with aiofiles.open(output_path, 'w', encoding='utf-8') as f:
-            await f.write(formatted_output)
+            async with aiofiles.open(output_path, 'w', encoding='utf-8') as f:
+                await f.write(formatted_output)
 
     except Exception as e:
         # Update task status with error
         active_tasks[task_id].status = "failed"
         active_tasks[task_id].error = str(e)
         active_tasks[task_id].message = f"Transcription failed: {str(e)}"
+        print(f"Error in transcription task {task_id}: {e}")
+        import traceback
+        traceback.print_exc()
 
     finally:
         # Clean up uploaded file
@@ -148,7 +152,7 @@ async def upload_file(
     detect_speakers: bool = Form(True),
     model_size: str = Form("base"),
     language: Optional[str] = Form(None),
-    output_format: str = Form("json")
+    output_format: str = Form("txt")
 ):
     """Upload and process audio file"""
 
@@ -271,12 +275,16 @@ async def download_result(task_id: str, format: str = "txt"):
     if task.status != "completed":
         raise HTTPException(status_code=400, detail="Task not completed yet")
 
+    # Check if file exists
     output_path = OUTPUT_DIR / f"{task_id}.{format}"
     if not output_path.exists():
-        # Generate the file on-demand
-        formatted_output = transcriber.format_output(task.result, format)
-        async with aiofiles.open(output_path, 'w', encoding='utf-8') as f:
-            await f.write(formatted_output)
+        # Generate the file on-demand if it doesn't exist
+        if task.result:
+            formatted_output = transcriber.format_output(task.result, format)
+            async with aiofiles.open(output_path, 'w', encoding='utf-8') as f:
+                await f.write(formatted_output)
+        else:
+            raise HTTPException(status_code=404, detail="Result not available")
 
     return FileResponse(
         output_path,
@@ -338,7 +346,10 @@ async def cleanup_old_tasks():
 
             for task_id in tasks_to_remove:
                 # Delete task and files
-                await delete_task(task_id)
+                try:
+                    await delete_task(task_id)
+                except:
+                    pass
 
         except Exception as e:
             print(f"Error during cleanup: {e}")
