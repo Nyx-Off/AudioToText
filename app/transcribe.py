@@ -42,16 +42,62 @@ class AudioTranscriber:
         if self.pyannote_pipeline is None:
             try:
                 print("Loading speaker diarization pipeline...")
-                self.pyannote_pipeline = Pipeline.from_pretrained(
-                    "pyannote/speaker-diarization-3.1"
-                )
+                
+                # Try to load HuggingFace token from multiple sources
+                hf_token = None
+                
+                # 1. Try from environment variable
+                hf_token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGINGFACE_TOKEN')
+                
+                # 2. Try from .env file
+                if not hf_token:
+                    env_file = Path('.env')
+                    if env_file.exists():
+                        with open(env_file, 'r') as f:
+                            for line in f:
+                                line = line.strip()
+                                if line.startswith('HF_TOKEN=') or line.startswith('HUGGINGFACE_TOKEN='):
+                                    hf_token = line.split('=', 1)[1].strip().strip('"').strip("'")
+                                    break
+                
+                # 3. Try from config file
+                if not hf_token:
+                    config_file = Path('hf_token.txt')
+                    if config_file.exists():
+                        with open(config_file, 'r') as f:
+                            hf_token = f.read().strip()
+                
+                if hf_token:
+                    print(f"Using HuggingFace token (length: {len(hf_token)})")
+                    self.pyannote_pipeline = Pipeline.from_pretrained(
+                        "pyannote/speaker-diarization-3.1",
+                        use_auth_token=hf_token
+                    )
+                else:
+                    print("No HuggingFace token found, trying without authentication...")
+                    print("\nTo enable speaker diarization:")
+                    print("1. Create a HuggingFace account: https://huggingface.co/join")
+                    print("2. Accept model conditions: https://huggingface.co/pyannote/speaker-diarization-3.1")
+                    print("3. Get your token: https://huggingface.co/settings/tokens")
+                    print("4. Create a file 'hf_token.txt' with your token")
+                    print("   OR set environment variable: export HF_TOKEN='your_token_here'\n")
+                    
+                    # Try without token anyway
+                    self.pyannote_pipeline = Pipeline.from_pretrained(
+                        "pyannote/speaker-diarization-3.1"
+                    )
+                
                 # Move to GPU if available
                 if torch.cuda.is_available():
                     self.pyannote_pipeline.to(torch.device("cuda"))
                 print("Speaker diarization pipeline loaded successfully")
             except Exception as e:
                 print(f"Warning: Could not load speaker diarization pipeline: {e}")
-                print("Speaker diarization will be disabled")
+                print("\n⚠️  SOLUTION: Pour activer la détection de plusieurs interlocuteurs:")
+                print("1. Visitez: https://huggingface.co/join (créer un compte)")
+                print("2. Acceptez: https://huggingface.co/pyannote/speaker-diarization-3.1")
+                print("3. Token: https://huggingface.co/settings/tokens")
+                print("4. Créez le fichier 'hf_token.txt' avec votre token\n")
                 return None
         return self.pyannote_pipeline
 
