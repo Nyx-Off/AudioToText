@@ -71,7 +71,7 @@ class AudioTranscriber:
                     print(f"Using HuggingFace token (length: {len(hf_token)})")
                     self.pyannote_pipeline = Pipeline.from_pretrained(
                         "pyannote/speaker-diarization-3.1",
-                        use_auth_token=hf_token
+                        token=hf_token
                     )
                 else:
                     print("No HuggingFace token found, trying without authentication...")
@@ -179,22 +179,47 @@ class AudioTranscriber:
             print("Running diarization...")
             diarization = pipeline(temp_audio_path)
 
-            # Convert to list of segments
+            # Convert to list of segments - pyannote v3.1+ API
             segments = []
             speaker_map = {}
             speaker_counter = 1
             
-            for turn, _, speaker in diarization.itertracks(yield_label=True):
-                # Map speaker labels to simple numbers
-                if speaker not in speaker_map:
-                    speaker_map[speaker] = speaker_counter
-                    speaker_counter += 1
-                
-                segments.append({
-                    "start": turn.start,
-                    "end": turn.end,
-                    "speaker": f"Speaker {speaker_map[speaker]}"
-                })
+            print("Processing diarization results with pyannote v3.1+ API...")
+            
+            # Method for pyannote v3.1+: Use get_timeline() and track labels
+            try:
+                # Iterate over timeline segments
+                for segment in diarization.get_timeline():
+                    # Get all labels/speakers active in this segment
+                    # diarization[segment] returns speaker activity scores
+                    segment_labels = diarization.get_labels(segment)
+                    
+                    # Get the dominant speaker (most active) for this segment
+                    if segment_labels:
+                        # If multiple speakers, take the most active one
+                        speaker_label = list(segment_labels)[0]  # Primary speaker
+                    else:
+                        # Fallback: use argmax to get most active speaker
+                        speaker_label = diarization[segment].argmax()
+                    
+                    # Map speaker label to speaker number
+                    if speaker_label not in speaker_map:
+                        speaker_map[speaker_label] = speaker_counter
+                        speaker_counter += 1
+                    
+                    segments.append({
+                        "start": segment.start,
+                        "end": segment.end,
+                        "speaker": f"Speaker {speaker_map[speaker_label]}"
+                    })
+                    
+            except Exception as e:
+                print(f"Diarization iteration failed: {e}")
+                print(f"Diarization type: {type(diarization)}")
+                print(f"Available methods: {dir(diarization)}")
+                # Clean up and return None
+                os.unlink(temp_audio_path)
+                return None
 
             # Clean up temporary file
             os.unlink(temp_audio_path)
