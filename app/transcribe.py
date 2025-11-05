@@ -69,9 +69,10 @@ class AudioTranscriber:
 
                 if hf_token:
                     print(f"Using HuggingFace token (length: {len(hf_token)})")
+                    # CORRECTED: Using 'token' instead of 'use_auth_token' for pyannote 3.1+
                     self.pyannote_pipeline = Pipeline.from_pretrained(
                         "pyannote/speaker-diarization-3.1",
-                        use_auth_token=hf_token
+                        token=hf_token  # Changed from use_auth_token to token
                     )
                 else:
                     print("No HuggingFace token found, trying without authentication...")
@@ -82,7 +83,7 @@ class AudioTranscriber:
                     print("4. Create a file 'hf_token.txt' with your token")
                     print("   OR set environment variable: export HF_TOKEN='your_token_here'\n")
 
-                    # Try without token anyway
+                    # Try without token anyway (will likely fail for gated models)
                     self.pyannote_pipeline = Pipeline.from_pretrained(
                         "pyannote/speaker-diarization-3.1"
                     )
@@ -91,13 +92,29 @@ class AudioTranscriber:
                 if torch.cuda.is_available():
                     self.pyannote_pipeline.to(torch.device("cuda"))
                 print("Speaker diarization pipeline loaded successfully")
+                
             except Exception as e:
-                print(f"Warning: Could not load speaker diarization pipeline: {e}")
-                print("\n⚠️  SOLUTION: Pour activer la détection de plusieurs interlocuteurs:")
-                print("1. Visitez: https://huggingface.co/join (créer un compte)")
-                print("2. Acceptez: https://huggingface.co/pyannote/speaker-diarization-3.1")
-                print("3. Token: https://huggingface.co/settings/tokens")
-                print("4. Créez le fichier 'hf_token.txt' avec votre token\n")
+                error_msg = str(e)
+                
+                # Check for specific error messages and provide helpful guidance
+                if "use_auth_token" in error_msg:
+                    print(f"Warning: API has changed. The error mentions 'use_auth_token' but we're using 'token'.")
+                    print(f"This might be a version mismatch. Please ensure pyannote.audio is up to date:")
+                    print("  pip install --upgrade pyannote.audio")
+                elif "401" in error_msg or "403" in error_msg or "Unauthorized" in error_msg:
+                    print(f"Warning: Authentication failed. Token might be invalid or conditions not accepted.")
+                    print("\n⚠️  SOLUTION: To enable speaker detection:")
+                    print("1. Visit: https://huggingface.co/join (create account)")
+                    print("2. Accept: https://huggingface.co/pyannote/speaker-diarization-3.1")
+                    print("3. Token: https://huggingface.co/settings/tokens")
+                    print("4. Create file 'hf_token.txt' with your token\n")
+                else:
+                    print(f"Warning: Could not load speaker diarization pipeline: {e}")
+                    print("\n⚠️  SOLUTION: To enable speaker detection:")
+                    print("1. Visit: https://huggingface.co/join (create account)")
+                    print("2. Accept: https://huggingface.co/pyannote/speaker-diarization-3.1")
+                    print("3. Token: https://huggingface.co/settings/tokens")
+                    print("4. Create file 'hf_token.txt' with your token\n")
                 return None
         return self.pyannote_pipeline
 
@@ -164,20 +181,11 @@ class AudioTranscriber:
             speaker_map = {}
             speaker_counter = 1
 
-            print("Processing diarization results with pyannote v3.1+ API...")
+            print("Processing diarization results...")
 
-            # Check if diarization has speaker_diarization attribute (DiarizeOutput)
-            if hasattr(diarization, 'speaker_diarization'):
-                print("Using DiarizeOutput.speaker_diarization")
-                annotation = diarization.speaker_diarization
-            else:
-                # Fallback: assume diarization is directly an Annotation object
-                print("Using Annotation directly")
-                annotation = diarization
-
-            # Iterate through the annotation
-            # itertracks yields (Segment, track_name, label)
-            for turn, _, speaker_label in annotation.itertracks(yield_label=True):
+            # The diarization object is an Annotation in pyannote 3.1+
+            # Use itertracks to get segments with speaker labels
+            for turn, _, speaker_label in diarization.itertracks(yield_label=True):
                 # Map speaker label to speaker number
                 if speaker_label not in speaker_map:
                     speaker_map[speaker_label] = speaker_counter

@@ -1,9 +1,6 @@
 #!/bin/bash
-
 # AudioToText Installation and Startup Script
-# This script sets up the environment and starts the application
-
-set -e  # Exit on any error
+set -e
 
 # Colors for output
 RED='\033[0;31m'
@@ -12,7 +9,6 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Function to print colored output
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
@@ -31,62 +27,37 @@ print_error() {
 
 # Check if Python 3.8+ is installed
 check_python() {
-    print_status "Vérification de Python..."
-
+    print_status "Checking Python..."
     if command -v python3 &> /dev/null; then
         PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
         if python3 -c "import sys; exit(0 if sys.version_info >= (3, 8) else 1)"; then
-            print_success "Python $PYTHON_VERSION trouvé"
+            print_success "Python $PYTHON_VERSION found"
             PYTHON_CMD="python3"
         else
-            print_error "Python 3.8 ou supérieur requis. Version actuelle: $PYTHON_VERSION"
+            print_error "Python 3.8+ required. Current version: $PYTHON_VERSION"
             exit 1
         fi
     else
-        print_error "Python 3 n'est pas installé"
+        print_error "Python 3 is not installed"
         exit 1
     fi
 }
 
 # Check if FFmpeg is installed
 check_ffmpeg() {
-    print_status "Vérification de FFmpeg..."
-
+    print_status "Checking FFmpeg..."
     if command -v ffmpeg &> /dev/null; then
         FFMPEG_VERSION=$(ffmpeg -version | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
-        print_success "FFmpeg $FFMPEG_VERSION trouvé"
+        print_success "FFmpeg $FFMPEG_VERSION found"
     else
-        print_warning "FFmpeg n'est pas installé. Installation en cours..."
-
-        # Detect distribution and install FFmpeg
+        print_warning "FFmpeg is not installed. Installing..."
         if command -v apt-get &> /dev/null; then
-            # Ubuntu/Debian
-            print_status "Installation de FFmpeg via apt..."
+            print_status "Installing FFmpeg via apt..."
             sudo apt-get update
             sudo apt-get install -y ffmpeg
-        elif command -v yum &> /dev/null; then
-            # CentOS/RHEL/Fedora
-            print_status "Installation de FFmpeg via yum..."
-            sudo yum install -y epel-release
-            sudo yum install -y ffmpeg
-        elif command -v dnf &> /dev/null; then
-            # Fedora
-            print_status "Installation de FFmpeg via dnf..."
-            sudo dnf install -y ffmpeg
-        elif command -v pacman &> /dev/null; then
-            # Arch Linux
-            print_status "Installation de FFmpeg via pacman..."
-            sudo pacman -S --noconfirm ffmpeg
         else
-            print_error "Impossible d'installer FFmpeg automatiquement. Veuillez l'installer manuellement."
-            print_status "Visitez: https://ffmpeg.org/download.html"
-            exit 1
-        fi
-
-        if command -v ffmpeg &> /dev/null; then
-            print_success "FFmpeg installé avec succès"
-        else
-            print_error "L'installation de FFmpeg a échoué"
+            print_error "Cannot install FFmpeg automatically. Please install manually."
+            print_status "Visit: https://ffmpeg.org/download.html"
             exit 1
         fi
     fi
@@ -94,112 +65,67 @@ check_ffmpeg() {
 
 # Create virtual environment
 create_venv() {
-    print_status "Création de l'environnement virtuel..."
-
+    print_status "Creating virtual environment..."
     if [ ! -d "venv" ]; then
         $PYTHON_CMD -m venv venv
-        print_success "Environnement virtuel créé"
+        print_success "Virtual environment created"
     else
-        print_warning "L'environnement virtuel existe déjà"
+        print_warning "Virtual environment already exists"
     fi
 }
 
 # Activate virtual environment
 activate_venv() {
-    print_status "Activation de l'environnement virtuel..."
+    print_status "Activating virtual environment..."
     source venv/bin/activate
-    print_success "Environnement virtuel activé"
+    print_success "Virtual environment activated"
 }
 
-# Upgrade pip
-upgrade_pip() {
-    print_status "Mise à jour de pip..."
-    pip install --upgrade pip
-    print_success "Pip mis à jour"
-}
-
-# Install Python dependencies
+# Install dependencies
 install_dependencies() {
-    print_status "Installation des dépendances Python..."
-
-    # Install system dependencies for magic library
-    if command -v apt-get &> /dev/null; then
-        print_status "Installation des dépendances système pour python-magic..."
-        sudo apt-get update
-        sudo apt-get install -y libmagic1
-    elif command -v yum &> /dev/null; then
-        print_status "Installation des dépendances système pour python-magic..."
-        sudo yum install -y file-devel
-    elif command -v dnf &> /dev/null; then
-        print_status "Installation des dépendances système pour python-magic..."
-        sudo dnf install -y file-devel
-    fi
-
-    # Install Python packages
+    print_status "Installing Python dependencies..."
+    pip install --upgrade pip
     pip install -r requirements.txt
-    print_success "Dépendances Python installées"
+    print_success "Dependencies installed"
 }
 
 # Create necessary directories
 create_directories() {
-    print_status "Création des répertoires nécessaires..."
+    print_status "Creating necessary directories..."
     mkdir -p uploads outputs
-    print_success "Répertoires créés"
+    print_success "Directories created"
 }
 
-# Make CLI script executable
-make_executable() {
-    print_status "Configuration des permissions..."
-    chmod +x cli.py
-    print_success "Scripts rendus exécutables"
-}
-
-# Function to start the web application
+# Start web application
 start_web_app() {
-    print_status "Démarrage de l'application web..."
-    print_success "Application web démarrée!"
+    print_status "Starting web application..."
+    print_success "Web application started!"
     echo ""
-    print_status "🌐 Accès à l'application:"
+    print_status "🌐 Access the application:"
     echo "   URL: http://localhost:8000"
-    echo "   Documentation API: http://localhost:8000/docs"
+    echo "   API Documentation: http://localhost:8000/docs"
     echo ""
-    print_status "Pour arrêter l'application, appuyez sur Ctrl+C"
+    print_status "Press Ctrl+C to stop the application"
     echo ""
-
-    # Start the FastAPI application
     python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-}
-
-# Function to run CLI
-run_cli() {
-    print_status "Interface CLI disponible. Commandes:"
-    echo "   python cli.py transcribe fichier.mp3"
-    echo "   python cli.py info"
-    echo "   python cli.py version"
-    echo ""
 }
 
 # Main installation function
 install() {
-    print_status "🎙️  Installation de AudioToText..."
+    print_status "🎙️  Installing AudioToText..."
     echo ""
-
     check_python
     check_ffmpeg
     create_venv
     activate_venv
-    upgrade_pip
     install_dependencies
     create_directories
-    make_executable
-
     echo ""
-    print_success "✅ Installation terminée avec succès!"
+    print_success "✅ Installation completed successfully!"
     echo ""
-    print_status "Utilisation:"
-    echo "   Application web: ./run.sh --web"
-    echo "   Ligne de commande: ./run.sh --cli"
-    echo "   Ou activez l'environnement: source venv/bin/activate"
+    print_status "Usage:"
+    echo "   Web application: ./run.sh --web"
+    echo "   Command line: ./run.sh --cli"
     echo ""
 }
 
@@ -210,7 +136,7 @@ case "${1:-}" in
         ;;
     --web|web)
         if [ ! -d "venv" ]; then
-            print_warning "L'application n'est pas installée. Installation en cours..."
+            print_warning "Application not installed. Installing..."
             install
         fi
         source venv/bin/activate
@@ -218,32 +144,35 @@ case "${1:-}" in
         ;;
     --cli|cli)
         if [ ! -d "venv" ]; then
-            print_warning "L'application n'est pas installée. Installation en cours..."
+            print_warning "Application not installed. Installing..."
             install
         fi
         source venv/bin/activate
-        run_cli
+        print_status "CLI interface available. Commands:"
+        echo "   python cli.py transcribe file.mp3"
+        echo "   python cli.py info"
+        echo "   python cli.py version"
         exec bash
         ;;
     --help|help|-h)
-        echo "AudioToText - Script d'installation et de démarrage"
+        echo "AudioToText - Installation and startup script"
         echo ""
         echo "Usage: $0 [OPTION]"
         echo ""
         echo "Options:"
-        echo "  --install, install  (défaut) Installe l'application complète"
-        echo "  --web, web          Démarre l'application web"
-        echo "  --cli, cli          Démarre un shell avec l'environnement activé"
-        echo "  --help, help, -h    Affiche cette aide"
+        echo "  --install, install  Install the complete application (default)"
+        echo "  --web, web          Start the web application"
+        echo "  --cli, cli          Start a shell with the environment activated"
+        echo "  --help, help, -h    Show this help"
         echo ""
-        echo "Exemples:"
-        echo "  ./run.sh           # Installation complète"
-        echo "  ./run.sh --web     # Démarrer l'application web"
-        echo "  ./run.sh --cli     # Interface ligne de commande"
+        echo "Examples:"
+        echo "  ./run.sh           # Complete installation"
+        echo "  ./run.sh --web     # Start web application"
+        echo "  ./run.sh --cli     # Command line interface"
         ;;
     *)
-        print_error "Option inconnue: $1"
-        print_status "Utilisez --help pour voir les options disponibles"
+        print_error "Unknown option: $1"
+        print_status "Use --help to see available options"
         exit 1
         ;;
 esac
