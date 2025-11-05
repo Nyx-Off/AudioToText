@@ -42,13 +42,13 @@ class AudioTranscriber:
         if self.pyannote_pipeline is None:
             try:
                 print("Loading speaker diarization pipeline...")
-                
+
                 # Try to load HuggingFace token from multiple sources
                 hf_token = None
-                
+
                 # 1. Try from environment variable
                 hf_token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGINGFACE_TOKEN')
-                
+
                 # 2. Try from .env file
                 if not hf_token:
                     env_file = Path('.env')
@@ -59,19 +59,19 @@ class AudioTranscriber:
                                 if line.startswith('HF_TOKEN=') or line.startswith('HUGGINGFACE_TOKEN='):
                                     hf_token = line.split('=', 1)[1].strip().strip('"').strip("'")
                                     break
-                
+
                 # 3. Try from config file
                 if not hf_token:
                     config_file = Path('hf_token.txt')
                     if config_file.exists():
                         with open(config_file, 'r') as f:
                             hf_token = f.read().strip()
-                
+
                 if hf_token:
                     print(f"Using HuggingFace token (length: {len(hf_token)})")
                     self.pyannote_pipeline = Pipeline.from_pretrained(
                         "pyannote/speaker-diarization-3.1",
-                        token=hf_token
+                        use_auth_token=hf_token
                     )
                 else:
                     print("No HuggingFace token found, trying without authentication...")
@@ -81,12 +81,12 @@ class AudioTranscriber:
                     print("3. Get your token: https://huggingface.co/settings/tokens")
                     print("4. Create a file 'hf_token.txt' with your token")
                     print("   OR set environment variable: export HF_TOKEN='your_token_here'\n")
-                    
+
                     # Try without token anyway
                     self.pyannote_pipeline = Pipeline.from_pretrained(
                         "pyannote/speaker-diarization-3.1"
                     )
-                
+
                 # Move to GPU if available
                 if torch.cuda.is_available():
                     self.pyannote_pipeline.to(torch.device("cuda"))
@@ -154,75 +154,40 @@ class AudioTranscriber:
 
         try:
             print(f"Starting speaker diarization on {audio_path}")
-            
-            # Load audio file using torchaudio
-            waveform, sample_rate = torchaudio.load(audio_path)
-            
-            # Convert to mono if stereo
-            if waveform.shape[0] > 1:
-                waveform = torch.mean(waveform, dim=0, keepdim=True)
-            
-            # Resample to 16kHz if needed
-            if sample_rate != 16000:
-                resampler = torchaudio.transforms.Resample(sample_rate, 16000)
-                waveform = resampler(waveform)
-                sample_rate = 16000
 
-            # Export to temporary wav file for pyannote
-            temp_audio = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
-            temp_audio_path = temp_audio.name
-            temp_audio.close()
-
-            torchaudio.save(temp_audio_path, waveform, sample_rate)
-
-            # Perform diarization
+            # Perform diarization directly on the audio file
             print("Running diarization...")
-            diarization = pipeline(temp_audio_path)
+            diarization = pipeline(audio_path)
 
-            # Convert to list of segments - pyannote v3.1+ API
+            # Convert to list of segments
             segments = []
             speaker_map = {}
             speaker_counter = 1
-            
-            print("Processing diarization results with pyannote v3.1+ API...")
-            
-            # Method for pyannote v3.1+: Use get_timeline() and track labels
-            try:
-                # Iterate over timeline segments
-                for segment in diarization.get_timeline():
-                    # Get all labels/speakers active in this segment
-                    # diarization[segment] returns speaker activity scores
-                    segment_labels = diarization.get_labels(segment)
-                    
-                    # Get the dominant speaker (most active) for this segment
-                    if segment_labels:
-                        # If multiple speakers, take the most active one
-                        speaker_label = list(segment_labels)[0]  # Primary speaker
-                    else:
-                        # Fallback: use argmax to get most active speaker
-                        speaker_label = diarization[segment].argmax()
-                    
-                    # Map speaker label to speaker number
-                    if speaker_label not in speaker_map:
-                        speaker_map[speaker_label] = speaker_counter
-                        speaker_counter += 1
-                    
-                    segments.append({
-                        "start": segment.start,
-                        "end": segment.end,
-                        "speaker": f"Speaker {speaker_map[speaker_label]}"
-                    })
-                    
-            except Exception as e:
-                print(f"Diarization iteration failed: {e}")
-                print(f"Diarization type: {type(diarization)}")
-                print(f"Available methods: {dir(diarization)}")
-                # Clean up and return None
-                os.unlink(temp_audio_path)
-                return None
 
-            # Clean up temporary file
-            os.unlink(temp_audio_path)
+            print("Processing diarization results with pyannote v3.1+ API...")
+
+            # Check if diarization has speaker_diarization attribute (DiarizeOutput)
+            if hasattr(diarization, 'speaker_diarization'):
+                print("Using DiarizeOutput.speaker_diarization")
+                annotation = diarization.speaker_diarization
+            else:
+                # Fallback: assume diarization is directly an Annotation object
+                print("Using Annotation directly")
+                annotation = diarization
+
+            # Iterate through the annotation
+            # itertracks yields (Segment, track_name, label)
+            for turn, _, speaker_label in annotation.itertracks(yield_label=True):
+                # Map speaker label to speaker number
+                if speaker_label not in speaker_map:
+                    speaker_map[speaker_label] = speaker_counter
+                    speaker_counter += 1
+
+                segments.append({
+                    "start": turn.start,
+                    "end": turn.end,
+                    "speaker": f"Speaker {speaker_map[speaker_label]}"
+                })
 
             print(f"Diarization complete: found {len(speaker_map)} speakers in {len(segments)} segments")
             return segments
@@ -260,7 +225,7 @@ class AudioTranscriber:
                 overlap_start = max(whisper_seg["start"], speaker_seg["start"])
                 overlap_end = min(whisper_seg["end"], speaker_seg["end"])
                 overlap_duration = max(0, overlap_end - overlap_start)
-                
+
                 if overlap_duration > max_overlap:
                     max_overlap = overlap_duration
                     assigned_speaker = speaker_seg["speaker"]
